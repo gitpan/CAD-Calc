@@ -1,0 +1,7 @@
+Changes
+      0.20 
+        Added sprintf("%0.9f") to seg_seg_intersection()
+
+      0.21
+        Several new functions and features.
+

@@ -1,0 +1,424 @@
+NAME
+    CAD::Calc - generic cad-related geometry calculations
+
+AUTHOR
+      Eric L. Wilhelm
+      ewilhelm at sbcglobal dot net
+      http://pages.sbcglobal.net/mycroft
+
+COPYRIGHT
+    This module is copyright (C) 2003 by Eric L. Wilhelm and A. Zahner Co.
+
+LICENSE
+    This module is distributed under the same terms as Perl. See the Perl
+    source package for details.
+
+    You may use this software under one of the following licenses:
+
+      (1) GNU General Public License
+        (found at http://www.gnu.org/copyleft/gpl.html)
+      (2) Artistic License
+        (found at http://www.perl.com/pub/language/misc/Artistic.html)
+
+NO WARRANTY
+    This software is distributed with ABSOLUTELY NO WARRANTY. The author and
+    his employer will in no way be held liable for any loss or damages
+    resulting from its use.
+
+Modifications
+    The source code of this module is made freely available and
+    distributable under the GPL or Artistic License. Modifications to and
+    use of this software must adhere to one of these licenses. Changes to
+    the code should be noted as such and this notification (as well as the
+    above copyright information) must remain intact on all copies of the
+    code.
+
+    Additionally, while the author is actively developing this code,
+    notification of any intended changes or extensions would be most helpful
+    in avoiding repeated work for all parties involved. Please contact the
+    author with any such development plans.
+
+CHANGES
+      0.20 
+        Added sprintf("%0.9f") to seg_seg_intersection()
+
+      0.21
+        Several new functions and features.
+
+Configuration
+    Used to set package global values such as precision.
+
+  import
+
+    Not called directly. Triggered by the use() function.
+
+      import(%options, @EXPORT_TAGS);
+
+    Example:
+
+      use CAD::Calc (
+            -precision => 0.125,
+            -angular   => 1.0e-6,
+            qw(
+                    seg_seg_intersection
+                    dist2d
+                    print_line
+                    )
+            );
+
+Constants
+  pi
+
+    Returns the value of CAD::Calc::pi
+
+      pi;
+
+Functions
+    These are all exported as options.
+
+  distdivide
+
+    Returns a list of point references resulting from dividing $line into as
+    many parts as possible which are at least $dist apart.
+
+      @points = distdivide(\@line, $dist);
+
+  subdivide
+
+    Returns a list of point references resulting from subdividing $line into
+    $count parts. The list will be $count-1 items long, (does not include
+    $line->[0] and $line->[1]);
+
+    $line is of the form: [ [x1, y1, z1], [x2, y2, z2] ] where z1 and z2 are
+    optional.
+
+      @points = subdivide($line, $count);
+
+  shorten_line
+
+    Shortens the line by the distances given in $lead and $tail.
+
+      @line = shorten_line(\@line, $lead, $tail);
+
+  dist
+
+    Returns the direct distance from ptA to ptB.
+
+      dist($ptA, $ptB);
+
+  dist2d
+
+    Purposefully ignores a z (2) coordinate.
+
+      dist2d($ptA, $ptB);
+
+  line_vec
+
+    Returns a Math::Vec object representing the vector from $ptA to $ptB
+    (which is actually a segment.)
+
+      $vec = line_vec($ptA, $ptB);
+
+  slope
+
+    Calculates the 2D slope between points @ptA and @ptB. Slope is defined
+    as dy / dx (rise over run.)
+
+    If dx is 0, will return the string "inf", which Perl so kindly treats as
+    you would expect it to (except it doesn't like to answer the question
+    "what is infinity over infinity?")
+
+      $slope = slope(\@ptA, \@ptB);
+
+  segs_as_transform
+
+    Allows two segments to specify transform data.
+
+    Returns: (\@translate, $rotate, $scale),
+
+    where:
+
+    @translate is a 2D array [$x, $y] basically describing segment @A
+
+    $rotate is the angular difference between $A[0]->$B[0] and $A[1]->$B[1]
+
+    $scale is the length of $A[1]->$B[1] divided by the length of
+    $A[0]->$B[0]
+
+      my ($translate, $rotate, $scale) = segs_as_transform(\@A, \@B);
+
+  chevron_to_ray
+
+    Converts a chevron into a directional line by finding the midpoint
+    between the midpoints of each edge and connecting to the middle point.
+
+      @line = chevron_to_ray(@pts);
+
+  signdist
+
+    Returns the signed distance
+
+      signdist(\@ptA, \@ptB);
+
+  offset
+
+    Creates a contour representing the offset of @polygon by $dist. Positive
+    distances are inward when @polygon is ccw.
+
+      @polygons = offset(\@polygon, $dist);
+
+  intersection_data
+
+    Calculates the two numerators and the denominator which are required for
+    various (seg-seg, line-line, ray-ray, seg-ray, line-ray, line-seg)
+    intersection calculations.
+
+      ($k, $l, $d) = intersection_data(\@line, \@line);
+
+  line_intersection
+
+    Returns the intersection point of two lines.
+
+      @pt = line_intersection(\@line, \@line, $tolerance);
+      @pt or die "no intersection";
+
+    If tolerance is defined, it will be used to sprintf the parallel factor.
+    Beware of this, it is clunky and might change if I come up with
+    something better.
+
+  seg_line_intersection
+
+    Finds the intersection of @segment and @line.
+
+      my @pt = seg_line_intersection(\@segment, \@line);
+      @pt or die "no intersection";
+      unless(defined($pt[1])) {
+        die "lines are parallel";
+      }
+
+  seg_seg_intersection
+
+      my @pt = seg_seg_intersection(\@segmenta, \@segmentb);
+
+  seg_ray_intersection
+
+    Intersects @seg with @ray, where $ray[1] is the direction of the
+    infinite ray.
+
+      seg_ray_intersection(\@seg, \@ray);
+
+  ray_pgon_int_index
+
+    Returns the first (lowest) index of @polygon which has a segment
+    intersected by @ray.
+
+      $index = ray_pgon_int_index(\@ray, \@polygon);
+
+  ray_pgon_closest_index
+
+    Returns the closest (according to dist2d) index of @polygon which has a
+    segment intersected by @ray.
+
+      $index = ray_pgon_closest_index(\@ray, \@polygon);
+
+  perp_through_point
+
+      @line = perp_through_point(\@pt, \@line);
+
+  foot_on_segment
+
+    Returns the perpendicular foot of @pt on @seg. See seg_ray_intersection.
+
+      @pt = foot_on_segment(\@pt, \@seg);
+
+  Determinant
+
+      Determinant($x1, $y1, $x2, $y2);
+
+  pgon_as_segs
+
+    Returns a list of [[@ptA],[@ptB]] segments representing the edges of
+    @pgon, where segment "0" is from $pgon[0] to $pgon[1]
+
+      @segs = pgon_as_segs(@pgon);
+
+  pgon_area
+
+      $area = pgon_area(@polygon);
+
+  pgon_angles
+
+    Returns the angle of each edge of polygon in xy plane. These fall
+    between -$pi and +$pi due to the fact that it is basically just a call
+    to the atan2() builtin.
+
+    Edges are numbered according to the index of the point which starts the
+    edge.
+
+      @angles = pgon_angles(@points);
+
+  pgon_deltas
+
+    Returns the differences between the angles of each edge of @polygon.
+    These will be indexed according to the point at which they occur, and
+    will be positive radians for ccw angles. Summing the @deltas will yield
+    +/-2pi (negative for cw polygons.)
+
+      @deltas = pgon_deltas(@pgon);
+
+  ang_deltas
+
+    Returns the same thing as pgon_deltas, but saves a redundant call to
+    pgon_angles.
+
+      my @angs = pgon_angles(@pts);
+      my @dels = ang_deltas(@angs);
+
+  pgon_direction
+
+    Returns 1 for counterclockwise and 0 for clockwise. Uses the sum of the
+    differences of angles of @polygon. If this sum is less than 0, the
+    polygon is clockwise.
+
+      $ang_sum = pgon_direction(@polygon);
+
+  angs_direction
+
+    Returns the same thing as pgon_direction, but saves a redundant call to
+    pgon_deltas.
+
+      my @angs = pgon_deltas(@pgon);
+      my $dir = angs_direction(@angs);
+
+  pgon_bisectors
+
+      pgon_bisectors();
+
+  sort_pgons_lr
+
+    Sorts polygons by their average points returning a list which reads from
+    left to right. (Rather odd place for this?)
+
+      @pgons = sort_pgons_lr(@pgons);
+
+  shift_line
+
+    Shifts line to right or left by $distance.
+
+      @line = shift_line(\@line, $distance, right|left);
+
+  line_to_rectangle
+
+    Creates a rectangle, centered about @line.
+
+      my @rec = line_to_rectangle(\@line, $offset, \%options);
+
+    The direction of the returned points will be counter-clockwise around
+    the original line, with the first point at the 'lower-left' (e.g. if
+    your line points up, $rec[0] will be below and to the left of $line[0].)
+
+    Available options
+      ends => 1|0,   # extend endpoints by $offset (default = 1)
+
+  isleft
+
+    Returns positive if @point is left of @line.
+
+      isleft(\@line, \@point);
+
+  iswithin
+
+    Returns true if @pt is within the polygon @bound.
+
+      $fact = iswithin(\@bound, \@pt);
+
+  iswithinc
+
+    Seems to be consistently much faster than the typical winding-number
+    iswithin.
+
+      iswithinc();
+
+  unitleft
+
+    Returns a unit vector which is perpendicular and to the left of @line.
+    Purposefully ignores any z-coordinates.
+
+      $vec = unitleft(@line);
+
+  unitright
+
+    Negative of unitleft().
+
+      $vec = unitright(@line);
+
+  unit_angle
+
+    Returns a Math::Vec vector which has a length of one at angle $ang (in
+    the XY plane.) $ang is fed through angle_parse().
+
+      $vec = unit_angle($ang);
+
+  angle_reduce
+
+    Reduces $ang (in radians) to be between -pi and +pi.
+
+      $ang = angle_reduce($ang);
+
+  angle_parse
+
+    Parses the variable $ang and returns a variable in radians. To convert
+    degrees to radians: $rad = angle_parse($deg . "d")
+
+      $rad = angle_parse($ang);
+
+  angle_quadrant
+
+    Returns the index of the quadrant which contains $angle. $angle is in
+    radians.
+
+      $q = angle_quadrant($angle);
+      @syms = qw(I II III IV);
+      print "angle is in quadrant: $syms[$q]\n";
+
+  collinear
+
+      $fact = collinear(\@pt1, \@pt2, \@pt3);
+
+  triangle_angles
+
+    Calculates the angles of a triangle based on it's lengths.
+
+      @angles = triangle_angles(@lengths);
+
+    The order of the returned angle will be "the angle before the edge".
+
+  stringify
+
+    Turns point into a string rounded according to $rnd. The optional $count
+    allows you to specify how many coordinates to use.
+
+      $string = stringify(\@pt, $rnd, $count);
+
+  pol_to_cart
+
+    Convert from polar to cartesian coordinates.
+
+      my ($x, $y, $z) = pol_to_cart($radius, $theta, $z);
+
+  cart_to_pol
+
+    Convert from polar to cartesian coordinates.
+
+      my ($radius, $theta, $z) = cart_to_pol($x, $y, $z);
+
+  print_line
+
+      print_line(\@line, $message);
+
+  point_avg
+
+    Averages the x and y coordinates of a list of points.
+
+            my ($x, $y) = point_avg(@points);
+
