@@ -1,5 +1,5 @@
 package CAD::Calc;
-our $VERSION = '0.24_01';
+our $VERSION = '0.24_02';
 
 use Math::Vec qw(NewVec :terse);
 use Math::Complex qw(acos);
@@ -95,8 +95,9 @@ CAD::Calc - generic cad-related geometry calculations
 
 =head1 AUTHOR
 
-  Eric L. Wilhelm <ewilhelm at cpan dot org>
-  http://scratchcomputing.com
+Eric L. Wilhelm <ewilhelm at cpan dot org>
+
+http://scratchcomputing.com
 
 =head1 COPYRIGHT
 

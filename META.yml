@@ -1,7 +1,8 @@
 ---
 name: CAD-Calc
-version: 0.24_01
-author: []
+version: 0.24_02
+author:
+  - Eric L. Wilhelm <ewilhelm at cpan dot org>
 abstract: generic cad-related geometry calculations
 license: perl
 resources:
@@ -15,7 +16,7 @@ requires:
 provides:
   CAD::Calc:
     file: lib/CAD/Calc.pm
-    version: 0.24_01
+    version: 0.24_02
 generated_by: Module::Build version 0.2703
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
