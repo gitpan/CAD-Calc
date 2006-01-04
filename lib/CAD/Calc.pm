@@ -1,12 +1,14 @@
 package CAD::Calc;
-our $VERSION = '0.21';
+our $VERSION = '0.24';
 
-use Math::Vec qw(NewVec);
+use Math::Vec qw(NewVec :terse);
 # this gets the OffsetPolygon routine (which still needs work)
-use Math::Geometry::Planar;
-use Math::Geometry::Planar::Offset;
-use Math::Complex;
+use Math::Complex qw(acos);
 use Math::Round::Var;
+use Math::BigFloat;
+
+# FIXME: add explicit exports to cleanup my namespace / make
+# dependencies clearer
 
 use vars qw(
 	$linear_precision
@@ -21,7 +23,7 @@ $pi = atan2(1,1) * 4;
 
 require Exporter;
 @ISA='Exporter';
-@EXPORT_OK = qw (
+@EXPORT_OK = qw(
 	pi
 	distdivide
 	subdivide
@@ -37,6 +39,7 @@ require Exporter;
 	shift_line
 	line_to_rectangle
 	isleft
+	howleft
 	iswithin
 	iswithinc
 	unitleft
@@ -51,31 +54,40 @@ require Exporter;
 	line_intersection
 	seg_line_intersection
 	seg_seg_intersection
+	line_ray_intersection
 	seg_ray_intersection
 	ray_pgon_int_index
 	ray_pgon_closest_index
 	perp_through_point
+	foot_on_line
 	foot_on_segment
 	Determinant
 	pgon_as_segs
 	pgon_area
+	pgon_centroid
+	pgon_lengths
 	pgon_angles
 	pgon_deltas
 	pgon_direction
 	pgon_bisectors
 	sort_pgons_lr
-	pgon_splice
+	pgon_start_index
+	re_order_pgon
+	order_pgon
 	stringify
+	stringify_line
 	pol_to_cart
 	cart_to_pol
 	print_line
 	point_avg
+	arc_2pt
 	);
 
 
 	
 use strict;
 use Carp;
+
 =pod
 
 =head1 NAME
@@ -84,13 +96,13 @@ CAD::Calc - generic cad-related geometry calculations
 
 =head1 AUTHOR
 
-  Eric L. Wilhelm
-  ewilhelm at sbcglobal dot net
-  http://pages.sbcglobal.net/mycroft
+  Eric L. Wilhelm <ewilhelm at cpan dot org>
+  http://scratchcomputing.com
 
 =head1 COPYRIGHT
 
-This module is copyright (C) 2003 by Eric L. Wilhelm and A. Zahner Co.
+This module is copyright (C) 2004, 2005 Eric L. Wilhelm.  Portions copyright
+(C) 2003 by Eric L. Wilhelm and A. Zahner Co.
 
 =head1 LICENSE
 
@@ -106,9 +118,9 @@ You may use this software under one of the following licenses:
 
 =head1 NO WARRANTY
 
-This software is distributed with ABSOLUTELY NO WARRANTY.  The author
-and his employer will in no way be held liable for any loss or damages
-resulting from its use.
+This software is distributed with ABSOLUTELY NO WARRANTY.  The author,
+his former employer, and any other contributors will in no way be held
+liable for any loss or damages resulting from its use.
 
 =head1 Modifications
 
@@ -124,26 +136,12 @@ notification of any intended changes or extensions would be most helpful
 in avoiding repeated work for all parties involved.  Please contact the
 author with any such development plans.
 
-
-=cut
-
-=head1 CHANGES
-
-  0.20 
-    Added sprintf("%0.9f") to seg_seg_intersection()
-
-  0.21
-    Several new functions and features.
-
 =cut
 ########################################################################
 
 =head1 Configuration
 
 Used to set package global values such as precision.
-
-=cut
-########################################################################
 
 =head2 import
 
@@ -171,7 +169,7 @@ sub import {
 	GetOptions( '-',
 		'precision=f' => \$linear_precision,
 		'angular=f'   => \$angular_precision,
-		);
+		) or croak("bad import arguments");
 	## print "using $linear_precision for linear\n";
 	## print "using $angular_precision for angular\n";
 	$linr = Math::Round::Var->new($linear_precision);
@@ -184,12 +182,9 @@ sub import {
 
 =head1 Constants
 
-=cut
-########################################################################
-
 =head2 pi
 
-Returns the value of CAD::Calc::pi
+Returns the value of $CAD::Calc::pi
 
   pi;
 
@@ -202,9 +197,6 @@ sub pi() {
 =head1 Functions
 
 These are all exported as options.
-
-=cut
-########################################################################
 
 =head2 distdivide
 
@@ -308,7 +300,8 @@ Purposefully ignores a z (2) coordinate.
 sub dist2d {
 	my($ptA, $ptB) = @_;
 	# print "ref is: ", ref($ptB), "\n";
-	(ref($ptB) eq "ARRAY") || ($ptB = [0,0,0]);
+	# (ref($ptB) eq "ARRAY") || ($ptB = [0,0,0]);
+	# XXX why was this ^-- here?!
 	# print "ptB: @{$ptB}\n";
 	my $dist = sqrt(
 		($ptB->[0] - $ptA->[0]) ** 2 +
@@ -338,7 +331,9 @@ as dy / dx (rise over run.)
 
 If dx is 0, will return the string "inf", which Perl so kindly treats as
 you would expect it to (except it doesn't like to answer the question
-"what is infinity over infinity?")
+"what is infinity over infinity?") 5.8.? users: sorry, there seems to be
+some regression here! (now we're using Math::BigFloat to return inf, so
+rounding has to go through that)
 
   $slope = slope(\@ptA, \@ptB);
 
@@ -347,7 +342,12 @@ sub slope {
 	my @line = @_;
 	my @delta = map({$line[1][$_] - $line[0][$_]} 0..1);
 	unless($delta[0]) {
-		return("inf");
+		if($delta[1] > 0) {
+			return(Math::BigFloat->binf());
+		}
+		else {
+			return(Math::BigFloat->binf('-'));
+		}
 	}
 	return($delta[1] / $delta[0]);
 } # end subroutine slope definition
@@ -429,6 +429,10 @@ Positive distances are inward when @polygon is ccw.
 =cut
 sub offset {
 	my ($polygon, $dist) = @_;
+	my $helper = "Math::Geometry::Planar::Offset";
+	eval("require $helper;");
+	$@ and croak("cannot offset without $helper\n", $@);
+	$helper->import('OffsetPolygon');
 	my @pgons = OffsetPolygon($polygon, $dist);
 	return(@pgons);
 } # end subroutine offset definition
@@ -563,6 +567,37 @@ sub seg_seg_intersection {
 } # end subroutine seg_seg_intersection definition
 ########################################################################
 
+=head2 line_ray_intersection
+
+Intersects @line with @ray, where $ray[1] is the direction of the
+infinite ray.
+
+  line_ray_intersection(\@line, \@ray);
+
+=cut
+sub line_ray_intersection {
+	my (@l) = @_;
+	my ($n1, $n2, $d) = intersection_data(@l);
+	# $n1 is distance along segment (must be between 0 and 1)
+	# $n2 is distance along ray (must be greater than 0)
+	if(sprintf("%0.9f", $d) == 0) {
+#        print "parallel\n";
+		return(0); # lines are parallel
+	}
+	# same as seg_ray_intersection(), but we skip the segment check
+	if($n2 / $d < 0) {
+#        print "nothing on ray\n";
+		# segment intersects behind ray
+		return();
+	}
+	my @pt = (
+		$l[0][0][0] + $n1 / $d * ($l[0][1][0] - $l[0][0][0]),
+		$l[0][0][1] + $n1 / $d * ($l[0][1][1] - $l[0][0][1]),
+		);
+	return(@pt);
+} # end subroutine line_ray_intersection definition
+########################################################################
+
 =head2 seg_ray_intersection
 
 Intersects @seg with @ray, where $ray[1] is the direction of the
@@ -674,6 +709,17 @@ sub perp_through_point {
 } # end subroutine perp_through_point definition
 ########################################################################
 
+=head2 foot_on_line
+
+  @pt = foot_on_line(\@pt, \@line);
+
+=cut
+sub foot_on_line {
+	my ($pt, $seg) = @_;
+	return(line_intersection($seg, [perp_through_point($pt, $seg)]));
+} # end subroutine foot_on_line definition
+########################################################################
+
 =head2 foot_on_segment
 
 Returns the perpendicular foot of @pt on @seg.  See seg_ray_intersection.
@@ -722,12 +768,59 @@ sub pgon_as_segs {
 
 =cut
 sub pgon_area {
-	my (@points) = @_;
-	my $pgon = Math::Geometry::Planar->new();
-	$pgon->points(\@points);
-	my $area = $pgon->area();
-	return($area);
+	my @pgon = @_;
+	(@pgon > 2) or return();
+	my $atmp = 0;
+	for(my $i = -1; $i < $#pgon; $i++) {
+		my $j = $i+1;
+		my ($xi, $yi) = @{$pgon[$i]};
+		my ($xj, $yj) = @{$pgon[$j]};
+		$atmp += $xi * $yj - $xj * $yi;
+	}
+	$atmp or return(); # no area
+	return($atmp / 2);
 } # end subroutine pgon_area definition
+########################################################################
+
+=head2 pgon_centroid
+
+  @centroid = pgon_centroid(@polygon);
+
+=cut
+sub pgon_centroid {
+	my @pgon = @_;
+	(@pgon > 2) or return();
+	my $atmp = 0;
+	my $xtmp = 0;
+	my $ytmp = 0;
+	for(my $i = -1; $i < $#pgon; $i++) {
+		my $j = $i+1;
+		my ($xi, $yi) = @{$pgon[$i]};
+		my ($xj, $yj) = @{$pgon[$j]};
+		my $ai = $xi * $yj - $xj * $yi;
+		$atmp += $ai;
+		$xtmp += ($xj + $xi) * $ai;
+		$ytmp += ($yj + $yi) * $ai;
+	}
+	$atmp or return(); # no area
+	my $area = $atmp / 2;
+	return($xtmp / (3 * $atmp), $ytmp / (3 * $atmp));
+} # end subroutine pgon_centroid definition
+########################################################################
+
+=head2 pgon_lengths
+
+  @lengths = pgon_lengths(@pgon);
+
+=cut
+sub pgon_lengths {
+	my (@points) = @_;
+	my @lengths = (0) x scalar(@points);
+	for(my $i = -1; $i < $#points; $i++) {
+		$lengths[$i] = dist2d(@points[$i, $i+1]);
+	}
+	return(@lengths);
+} # end subroutine pgon_lengths definition
 ########################################################################
 
 =head2 pgon_angles
@@ -858,6 +951,125 @@ sub sort_pgons_lr {
 } # end subroutine sort_pgons_lr definition
 ########################################################################
 
+=head2 pgon_start_index
+
+Returns the index of pgon which is at the "lowest left".
+
+  $i = pgon_start_index(@pgon);
+
+=cut
+sub pgon_start_index {
+	my @pgon = @_;
+	my @ordered = sort({
+		my $c;
+		$c = $pgon[$a][$_] <=> $pgon[$b][$_] and return $c for 0..1;
+	} 0..$#pgon);
+	# print "index order @ordered\n";
+	return($ordered[0]);
+} # end subroutine pgon_start_index definition
+########################################################################
+
+=head2 pgon_start_indexb
+
+Returns the index of pgon which is at the "lowest left".
+
+Different method (is it faster?)
+
+  $i = pgon_start_indexb(@pgon);
+
+=cut
+sub pgon_start_indexb {
+	my @pgon = @_;
+	my %sort_hash;
+	for(my $c = 0; $c < @pgon; $c++) {
+		# this is still janky, should really do something about slope?
+		my @pt = map({sprintf("%0.2f", $_)} @{$pgon[$c]});
+		$sort_hash{$pt[0]}{$pt[1]} = $c;
+	}
+	my ($least_x) = sort({$a <=> $b} keys(%sort_hash));
+	my ($least_y) = sort({$a <=> $b} keys(%{$sort_hash{$least_x}}));
+	my $index = $sort_hash{$least_x}{$least_y};
+	return($index);
+} # end subroutine pgon_start_indexb definition
+########################################################################
+
+=head2 pgon_start_index_z
+
+Yet another different method (is this even correct?)
+
+  pgon_start_index_z();
+
+=cut
+sub pgon_start_index_z {
+	my @pgon = @_;
+	# use the quarter-length
+	my @minmax = (sort({$a <=> $b} map({$_->[0]} @pgon)))[0,-1];
+	my $x_fourth = $minmax[0] + ($minmax[1] - $minmax[0]) / 4;
+	my @contend;
+	for(my $i = 0; $i < @pgon; $i++) {
+		if($pgon[$i][0] < $x_fourth) {
+			push(@contend, $i);
+		}
+	}
+	# print scalar(@contend), " contenders\n";
+	my @ordered = sort({$pgon[$a][1] <=> $pgon[$b][1]} @contend);
+	# to be even more thorough:
+	my @yminmax = (sort({$a <=> $b} map({$_->[1]} @pgon)))[0,-1];
+	# quantify with 1/4 of the yspan:
+	my $yspan = ($yminmax[1] - $yminmax[0]) / 4;
+	my $choice = shift(@ordered);
+	foreach my $idx (@ordered) {
+		# if it is below and left, then we already have it, if it above
+		# and left, then we might want it
+		if($pgon[$idx][1] < ($pgon[$choice][1] + $yspan)) {
+			($pgon[$idx][0] < $pgon[$choice][0]) and ($choice = $idx);
+		}
+	}
+	return($choice);
+} # end subroutine pgon_start_index_z definition
+########################################################################
+
+=head2 re_order_pgon
+
+Imposes counter-clockwise from "lower-left" ordering.
+
+  @pgon = re_order_pgon(@pgon);
+
+=cut
+sub re_order_pgon {
+	my @pgon = @_;
+	unless(pgon_direction(@pgon)) {
+		@pgon = reverse(@pgon);
+	}
+	my $index = pgon_start_index_z(@pgon);
+	return(order_pgon($index, \@pgon));
+} # end subroutine re_order_pgon definition
+########################################################################
+
+=head2 order_pgon
+
+Rewinds the polygon (e.g. list) to the specified $start index.  This is
+not restricted to polygons (just continuous (looped) lists.)
+
+  @pgon = order_pgon($start, \@pgon);
+
+=cut
+sub order_pgon {
+	my $index = shift;
+	my $pg = shift;
+	my @pgon = @{$pg};
+	($index < 0) and ($index += @pgon);
+	my @new;
+	for(my $d = 0; $d < @pgon; $d++) {
+		my $i = $index + $d;
+		($i > $#pgon) and ($i -= @pgon);
+		# print "using $i\n";
+		push(@new, $pgon[$i]);
+	}
+	return(@new);
+} # end subroutine order_pgon definition
+########################################################################
+
 =head2 shift_line
 
 Shifts line to right or left by $distance.
@@ -878,6 +1090,7 @@ sub shift_line {
 	else {
 		croak ("direction must be \"left\" or \"right\"\n");
 	}
+	$mvec = NewVec($mvec->ScalarMult($dist));
 	my @newline = map({[$mvec->Plus($_)]} @line);
 	return(@newline);
 } # end subroutine shift_line definition
@@ -894,7 +1107,7 @@ the original line, with the first point at the 'lower-left' (e.g. if
 your line points up, $rec[0] will be below and to the left of
 $line[0].)  
 
-=item Available options
+Available options
 
   ends => 1|0,   # extend endpoints by $offset (default = 1)
 
@@ -935,24 +1148,39 @@ sub line_to_rectangle {
 
 =head2 isleft
 
-Returns positive if @point is left of @line.
+Returns true if @point is left of @line.
 
-  isleft(\@line, \@point);
+  $bool = isleft(\@line, \@point);
 
 =cut
 sub isleft {
+	my ($line, $pt) = @_;
+	my $how = howleft($line, $pt);
+	return($how > 0);
+} # end subroutine isleft definition
+########################################################################
+
+=head2 howleft
+
+Returns positive if @point is left of @line.
+
+  $number = howleft(\@line, \@point);
+
+=cut
+sub howleft {
 	my ($line, $pt) = @_;
 	my $isleft = ($line->[1][0] - $line->[0][0]) * 
 					($pt->[1] - $line->[0][1]) -
 				 ($line->[1][1] - $line->[0][1]) *
 				 	($pt->[0] - $line->[0][0]);
 	return($isleft);
-} # end subroutine isleft definition
+} # end subroutine howleft definition
 ########################################################################
 
 =head2 iswithin
 
-Returns true if @pt is within the polygon @bound.
+Returns true if @pt is within the polygon @bound.  This will be negative
+for clockwise input.
 
   $fact = iswithin(\@bound, \@pt);
 
@@ -964,7 +1192,7 @@ sub iswithin {
 	for(my $n = -1; $n < $#bound; $n ++) {
 		my $next = $n+1;
 		my @seg = ($bound[$n], $bound[$next]);
-		my $isleft = isleft(\@seg, $pt);
+		my $isleft = howleft(\@seg, $pt);
 		if($seg[0][1] <= $pt->[1]) {
 			if($seg[1][1] > $pt->[1]) {
 				($isleft > 0) && $winding++;
@@ -983,9 +1211,11 @@ sub iswithin {
 
 =head2 iswithinc
 
-Seems to be consistently much faster than the typical winding-number iswithin.
+Seems to be consistently much faster than the typical winding-number
+iswithin.  The true return value is always positive regardless of the
+polygon's direction.
 
-  iswithinc();
+  $fact = iswithinc(\@bound, \@pt);
 
 =cut
 sub iswithinc {
@@ -1020,8 +1250,8 @@ sub unitleft {
 			);
 	$ln = NewVec($ln->UnitVector());
 	my $left = NewVec($ln->Cross([0,0,-1]));
-	my $isleft = isleft(\@line, [$left->Plus($line[0])]);
-# 	print "fact said $isleft\n";
+	## my $isleft = isleft(\@line, [$left->Plus($line[0])]);
+	## print "fact said $isleft\n";
 	return($left);
 } # end subroutine unitleft definition
 ########################################################################
@@ -1131,6 +1361,7 @@ sub collinear {
 	my $cp = NewVec($va->Cross($vb));
 	my $ta = $cp->Length();
 #    print "my vectors: @$va\n@$vb\n@$cp\n";
+#    print "angs: ", $va->Ang(), " and ", $vb->Ang(), "\n";
 #    print "ta: $ta\n";
 	return(abs($ta) < 0.001);
 } # end subroutine collinear definition
@@ -1183,6 +1414,22 @@ sub stringify {
 	return($str);
 	
 } # end subroutine stringify definition
+########################################################################
+
+=head2 stringify_line
+
+Turns a line (or polyline) into a string.  See stringify().
+
+  stringify_line(\@line, $char, $rnd, $count);
+
+=cut
+sub stringify_line {
+	my ($line, $char, $rnd, $count) = @_;
+	defined($char) or ($char = "\n");
+	defined($rnd) or ($rnd = 2);
+	defined($count) or ($count = 2);
+	return(join($char, map({stringify($_, $rnd, $count)} @$line)));
+} # end subroutine stringify_line definition
 ########################################################################
 
 =head2 pol_to_cart
@@ -1254,5 +1501,49 @@ sub point_avg {
 	$y_avg = $y_avg / $num;
 	return($x_avg, $y_avg); 
 } # end subroutine point_avg definition
+
+=head2 arc_2pt
+
+Given a pair of endpoints and an angle (in radians), returns an arc with
+center, radius, and start/end angles.
+
+  my %arc = arc_2pt(\@pts, $angle);
+
+=cut
+sub arc_2pt {
+	my ($pts, $angle) = @_;
+	my $dir = (($angle >= 0) ? 1 : -1);
+	$angle = abs($angle);
+	my %arc;
+	my $chord = V(@{$pts->[1]}) - $pts->[0];
+	my $clen = abs($chord);
+	# warn "chord: $chord\n";
+	# warn "chord length: $clen\n";
+	my $eps = $angle /4;
+	(cos($eps) == 0) and die "ack";
+	my $blg = sin($eps)/cos($eps);
+	my $s = $clen / 2 * $blg;
+	my $r = (($clen/2)**2 + $s**2) / (2 * $s);
+	## warn "radius: $r\n";
+	## my $mid = $pts->[1] + $chord / 2;
+	my $gamma = (pi - $angle) / 2;
+	## warn "gamma: $gamma\n";
+	my $cang = $chord->Ang;
+	my $phi = $cang + $dir * $gamma;
+	## warn "phi: $phi\n";
+	my $conn = V(pol_to_cart($r, $phi));
+	my $center = $pts->[0] + $conn;
+	## warn "center: $center\n";
+	$arc{pt} = [@$center[0,1]];
+	$arc{rad} = $r;
+	$arc{angs} = [
+		(- $conn)->Ang,
+		($pts->[1] - $center)->Ang
+		];
+	($dir > 0) or ($arc{angs} = [reverse(@{$arc{angs}})]);
+	$arc{direction} = $dir;
+	return(%arc);
+} # end subroutine arc_2pt definition
+########################################################################
 
 1;
