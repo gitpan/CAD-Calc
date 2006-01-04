@@ -1,8 +1,7 @@
 package CAD::Calc;
-our $VERSION = '0.24';
+our $VERSION = '0.24_01';
 
 use Math::Vec qw(NewVec :terse);
-# this gets the OffsetPolygon routine (which still needs work)
 use Math::Complex qw(acos);
 use Math::Round::Var;
 use Math::BigFloat;
@@ -429,6 +428,7 @@ Positive distances are inward when @polygon is ccw.
 =cut
 sub offset {
 	my ($polygon, $dist) = @_;
+	# this gets the OffsetPolygon routine (which still needs work)
 	my $helper = "Math::Geometry::Planar::Offset";
 	eval("require $helper;");
 	$@ and croak("cannot offset without $helper\n", $@);

@@ -23,7 +23,7 @@ my $builder = $build_class->new(
 		#'Math::Geometry::Planar::Offset' => 1.03_01
 
 	},
-	add_to_cleanup      => [ qw(CAD-Calc-*)],
+	add_to_cleanup      => [ qw(CAD-Calc-* META.yml)],
 );
 
 $builder->create_build_script();
