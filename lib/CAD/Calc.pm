@@ -1,5 +1,5 @@
 package CAD::Calc;
-our $VERSION = '0.24_02';
+our $VERSION = '0.25';
 
 use Math::Vec qw(NewVec :terse);
 use Math::Complex qw(acos);
