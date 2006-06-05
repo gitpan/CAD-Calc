@@ -1,3 +1,7 @@
+0.26
+	minor fixup for transient Exporter.pm bug
+	fixed nit in compatibility Makefile.PL
+
 0.25
 	different tests
 	0.24 was a bad release

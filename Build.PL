@@ -20,8 +20,9 @@ my $builder = $build_class->new(
 		'Math::Round::Var' => 0.02,
 		'Math::Complex'    => 0,
 		'Math::BigFloat'   => 0,
-		#'Math::Geometry::Planar::Offset' => 1.03_01
-
+	},
+	recommends => {
+		'Math::Geometry::Planar::Offset' => 1.03_01
 	},
 	add_to_cleanup      => [ qw(CAD-Calc-* META.yml)],
 );

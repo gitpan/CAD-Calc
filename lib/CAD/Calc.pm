@@ -1,7 +1,10 @@
 package CAD::Calc;
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
-use Math::Vec qw(NewVec :terse);
+use Math::Vec qw(
+	:terse
+	NewVec
+	);
 use Math::Complex qw(acos);
 use Math::Round::Var;
 use Math::BigFloat;
@@ -165,8 +168,8 @@ Example:
 sub import {
 	## print "import called with @_\n";
 	local @ARGV = @_; # shame that Getopt::Long isn't structured better!
-	use Getopt::Long;
-	GetOptions( '-',
+	use Getopt::Long ();
+	Getopt::Long::GetOptions( '-',
 		'precision=f' => \$linear_precision,
 		'angular=f'   => \$angular_precision,
 		) or croak("bad import arguments");
@@ -764,6 +767,9 @@ sub pgon_as_segs {
 ########################################################################
 
 =head2 pgon_area
+
+Returns the area of @polygon.  Returns a negative number for clockwise
+polygons.
 
   $area = pgon_area(@polygon);
 
