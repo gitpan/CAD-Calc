@@ -5,7 +5,7 @@ use Test::More qw(
 	);
 
 use_ok('CAD::Calc');
-# XXX needs to skip
+
 SKIP: {
 	my $helper = 'Math::Geometry::Planar::Offset';
 	my $ok = eval("require $helper;"); 

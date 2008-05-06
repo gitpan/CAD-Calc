@@ -1,11 +1,9 @@
 Build.PL
 Changes
-MANIFEST
-META.yml # Will be created by "make dist"
-Makefile.PL
-README
 lib/CAD/Calc.pm
+MANIFEST			This list of files
+MANIFEST.SKIP
+META.yml
+README
 t/00-load.t
-t/01-pod-coverage.t
-t/02-pod.t
-t/03-offset.t
+t/offset.t

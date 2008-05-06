@@ -1,5 +1,5 @@
 package CAD::Calc;
-our $VERSION = '0.26';
+our $VERSION = 0.27;
 
 use Math::Vec qw(
 	:terse
@@ -98,14 +98,14 @@ CAD::Calc - generic cad-related geometry calculations
 
 =head1 AUTHOR
 
-Eric L. Wilhelm <ewilhelm at cpan dot org>
+Eric Wilhelm @ <ewilhelm at cpan dot org>
 
 http://scratchcomputing.com
 
 =head1 COPYRIGHT
 
-This module is copyright (C) 2004, 2005 Eric L. Wilhelm.  Portions copyright
-(C) 2003 by Eric L. Wilhelm and A. Zahner Co.
+This module is copyright (C) 2004, 2005, 2006, 2008 Eric L. Wilhelm.
+Portions copyright (C) 2003 by Eric L. Wilhelm and A. Zahner Co.
 
 =head1 LICENSE
 
@@ -140,7 +140,6 @@ in avoiding repeated work for all parties involved.  Please contact the
 author with any such development plans.
 
 =cut
-########################################################################
 
 =head1 Configuration
 
